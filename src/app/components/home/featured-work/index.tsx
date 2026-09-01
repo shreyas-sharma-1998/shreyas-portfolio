@@ -192,7 +192,7 @@ const WorkAndInterests = () => {
                                 Work & Interests
                             </p>
                             <Button asChild variant="outline" className="h-auto">
-                                <Link href="#" className="py-3 px-5">View Resume</Link>
+                                <Link href="/Shreyas-Resume.pdf" target="_blank" className="py-3 px-5">View Resume</Link>
                             </Button>
                         </div>
 
