@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,10 +24,15 @@ type TabItem = {
     action: ItemAction;
 };
 
+type TabGroup = {
+    label: string;
+    items: TabItem[];
+};
+
 type Tab = {
     id: string;
     label: string;
-    items: TabItem[];
+    groups: TabGroup[];
 };
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -56,7 +60,6 @@ const ItemModal = ({ item, onClose }: { item: TabItem; onClose: () => void }) =>
                 className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
                 onClick={e => e.stopPropagation()}
             >
-                {/* Image */}
                 <div className="relative">
                     <Image
                         src={item.image}
@@ -73,7 +76,6 @@ const ItemModal = ({ item, onClose }: { item: TabItem; onClose: () => void }) =>
                     </button>
                 </div>
 
-                {/* Content */}
                 <div className="p-6 flex flex-col gap-5">
                     <div className="flex flex-col gap-1">
                         <h4 className="font-semibold">{item.title}</h4>
@@ -125,13 +127,13 @@ const ItemCard = ({
 
     const inner = (
         <>
-            <div className="overflow-hidden">
+            <div className="overflow-hidden h-56 flex items-center justify-center bg-primary/3">
                 <Image
                     src={item.image}
                     alt={item.title}
                     width={490}
                     height={300}
-                    className="w-full h-full group-hover:scale-105 transition-all duration-300 ease-in-out"
+                    className="h-full w-full object-contain group-hover:scale-105 transition-all duration-300 ease-in-out"
                 />
             </div>
             <div className="flex flex-col gap-1 sm:gap-2 px-2">
@@ -156,11 +158,44 @@ const ItemCard = ({
     );
 };
 
+// ─── Sub-tab bar ──────────────────────────────────────────────────────────────
+
+const SubTabs = ({
+    groups,
+    activeGroup,
+    onChange,
+}: {
+    groups: TabGroup[];
+    activeGroup: string;
+    onChange: (label: string) => void;
+}) => {
+    if (groups.length <= 1 && groups[0]?.label === "") return null;
+
+    return (
+        <div className="flex flex-wrap gap-2 pt-4 pb-2">
+            {groups.map(group => (
+                <button
+                    key={group.label}
+                    onClick={() => onChange(group.label)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
+                        activeGroup === group.label
+                            ? "bg-primary text-white border-primary"
+                            : "bg-transparent text-secondary border-primary/20 hover:border-primary/50 hover:text-primary"
+                    }`}
+                >
+                    {group.label}
+                </button>
+            ))}
+        </div>
+    );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const WorkAndInterests = () => {
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string>("");
+    const [activeGroups, setActiveGroups] = useState<Record<string, string>>({});
     const [selectedItem, setSelectedItem] = useState<TabItem | null>(null);
 
     useEffect(() => {
@@ -170,7 +205,14 @@ const WorkAndInterests = () => {
                 if (!res.ok) throw new Error("Failed to fetch");
                 const data = await res.json();
                 setTabs(data.tabs);
-                if (data.tabs.length > 0) setActiveTabId(data.tabs[0].id);
+                if (data.tabs.length > 0) {
+                    setActiveTabId(data.tabs[0].id);
+                    const defaults: Record<string, string> = {};
+                    data.tabs.forEach((tab: Tab) => {
+                        if (tab.groups.length > 0) defaults[tab.id] = tab.groups[0].label;
+                    });
+                    setActiveGroups(defaults);
+                }
             } catch (error) {
                 console.error("Error fetching work data:", error);
             }
@@ -179,6 +221,12 @@ const WorkAndInterests = () => {
     }, []);
 
     const activeTab = tabs.find(t => t.id === activeTabId);
+    const activeGroupLabel = activeGroups[activeTabId] ?? "";
+    const activeGroup = activeTab?.groups.find(g => g.label === activeGroupLabel);
+
+    const setActiveGroup = (label: string) => {
+        setActiveGroups(prev => ({ ...prev, [activeTabId]: label }));
+    };
 
     return (
         <section>
@@ -196,7 +244,7 @@ const WorkAndInterests = () => {
                             </Button>
                         </div>
 
-                        {/* Tabs */}
+                        {/* Top-level tabs */}
                         <div className="flex gap-1 mt-6 border-b border-primary/10">
                             {tabs.map(tab => (
                                 <button
@@ -212,18 +260,37 @@ const WorkAndInterests = () => {
                                 </button>
                             ))}
                         </div>
+
+                        {/* Sub-tabs — always rendered to prevent layout shift */}
+                        <div className="min-h-[44px]">
+                            {activeTab && (
+                                <SubTabs
+                                    groups={activeTab.groups}
+                                    activeGroup={activeGroupLabel}
+                                    onChange={setActiveGroup}
+                                />
+                            )}
+                        </div>
                     </div>
 
-                    {/* Cards Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 border-t border-primary/10">
-                        {activeTab?.items.map((item, index) => (
-                            <ItemCard
-                                key={`${activeTabId}-${index}`}
-                                item={item}
-                                isRightCol={index % 2 === 1}
-                                onModalOpen={() => setSelectedItem(item)}
-                            />
-                        ))}
+                    {/* Cards */}
+                    <div className="min-h-[400px] border-t border-primary/10">
+                        {activeGroup && activeGroup.items.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2">
+                                {activeGroup.items.map((item, index) => (
+                                    <ItemCard
+                                        key={`${activeTabId}-${activeGroupLabel}-${index}`}
+                                        item={item}
+                                        isRightCol={index % 2 === 1}
+                                        onModalOpen={() => setSelectedItem(item)}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="max-w-3xl mx-auto px-4 sm:px-7 py-16">
+                                <p className="text-secondary text-sm">Coming soon.</p>
+                            </div>
+                        )}
                     </div>
 
                 </div>
